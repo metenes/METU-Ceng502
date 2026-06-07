@@ -11,7 +11,7 @@
 
 ---
 
-## Abstract
+## 1. Introduction
 
 In this project, I reproduced part of Table 3 from the paper *Copresheaf Topological Neural Networks: A Generalized Deep Learning Framework*. I focused on the comparison between GraphSAGE and CopresheafSAGE on the MUTAG molecular graph classification dataset. I selected this experiment because it directly tests one of the main practical claims of the paper while remaining realistic to reproduce with the available time and computational resources.
 
@@ -21,27 +21,7 @@ My implementation obtained **0.716 ± 0.060** for GraphSAGE and **0.726 ± 0.048
 
 ---
 
-## 1. Introduction
-
-Graph neural networks are designed to process data that are naturally represented as graphs. In a graph, information is stored on nodes and edges instead of on a regular grid such as an image. A graph neural network updates the representation of each node by collecting information from its neighbors. This operation is generally called **message passing**.
-
-Most standard graph neural networks assume that all nodes use the same feature space and that a neighbor's representation can be sent directly to another node. The paper studied in this project proposes a more general framework based on **copresheaves**. In simple terms, the copresheaf framework allows information to be transformed while it moves from one location to another. Instead of assuming that the same representation has exactly the same meaning at every node, a learned edge-dependent map translates the source node's representation into a representation suitable for the target node.
-
-The authors call their general framework **Copresheaf Topological Neural Networks**, or CTNNs. Their framework is broad and includes models for graphs, combinatorial complexes, transformers, physical simulations, and other structured domains. Because reproducing every experiment in the paper would be too large for one course project, I selected one focused experiment: GraphSAGE versus CopresheafSAGE on MUTAG.
-
-The main question of my reproduction was:
-
-> Does adding a learned, edge-dependent diagonal transport map to GraphSAGE improve mean test accuracy on MUTAG under the paper's stated training setup?
-
-This is a useful reproduction target because it is small enough to execute on Google Colab, but it still requires implementing the main architectural idea instead of only rerunning an existing baseline.
-
----
-
 ## 2. Paper and Reproduction Target
-
-The paper is:
-
-> Mustafa Hajij, Lennart Bastian, Sarah Osentoski, Hardik Kabaria, John L. Davenport, Sheik Dawood, Balaji Cherukuri, Joseph G. Kocheemoolayil, Nastaran Shahmansouri, Adrian Lew, Theodore Papamarkou, and Tolga Birdal. *Copresheaf Topological Neural Networks: A Generalized Deep Learning Framework*. NeurIPS 2025.
 
 I reproduced the **GraphSAGE** and **CopresheafSAGE** rows of **Table 3**.
 
@@ -64,102 +44,9 @@ I did not attempt to reproduce the entire table or the entire paper. Table 3 als
 
 ---
 
-## 4. Background
+## 3. Dataset
 
-### 4.1 Graph classification
-
-In node classification, a model predicts one label for each node. In graph classification, the model must predict one label for the entire graph.
-
-A graph-classification model usually has two main stages:
-
-1. A graph neural network computes node representations.
-2. A readout operation converts all node representations into one graph representation.
-
-In this project, I used **global mean pooling** as the readout operation. If a graph has \(N\) nodes with final node representations \(h_1, \ldots, h_N\), the graph representation is:
-
-\[
-h_G = \frac{1}{N}\sum_{i=1}^{N} h_i.
-\]
-
-A final linear layer maps \(h_G\) to the two MUTAG classes.
-
-### 4.2 Standard GraphSAGE
-
-GraphSAGE updates a node by combining its own feature with an aggregation of its neighbors. For mean aggregation, a simplified update is:
-
-\[
-\bar{h}_i =
-\operatorname{mean}_{j \in \mathcal{N}(i)} h_j,
-\]
-
-\[
-h_i^{\text{out}}
-=
-W_{\text{root}}h_i
-+
-W_{\text{neighbor}}\bar{h}_i.
-\]
-
-Here, \(\mathcal{N}(i)\) is the neighborhood of node \(i\). The same neighbor projection is applied to all received messages. This means that the message sent by node \(j\) is not explicitly transformed according to the identity of target node \(i\).
-
-### 4.3 Copresheaf interpretation
-
-The copresheaf view associates a feature space with each location and a map with each directed relation. For an edge \(j \rightarrow i\), the map
-
-\[
-\rho_{ij}: F(j) \rightarrow F(i)
-\]
-
-transports the representation from the source feature space into the target feature space.
-
-The useful intuition is that each node may have its own local coordinate system or local interpretation of features. Before a source message is combined with the target node's information, the model learns how that source message should be translated.
-
-### 4.4 CopresheafSAGE transport
-
-The paper defines the CopresheafSAGE transport using a learned diagonal update. For target node \(i\) and source node \(j\):
-
-\[
-\Delta_{ij}
-=
-\tanh\left(
-\operatorname{Linear}([h_i;h_j])
-\right).
-\]
-
-The concatenation \([h_i;h_j]\) contains both the target and source features. This makes the transport directional: changing the order of the nodes changes the input to the transport network.
-
-The map is:
-
-\[
-\rho_{ij} = I + \Delta_{ij}.
-\]
-
-Because \(\Delta_{ij}\) is diagonal, applying the map does not require building a full matrix. The transformed message can be calculated element by element:
-
-\[
-\rho_{ij}h_j
-=
-(1+\Delta_{ij}) \odot h_j,
-\]
-
-where \(\odot\) denotes element-wise multiplication.
-
-The messages are then averaged:
-
-\[
-m_i
-=
-\operatorname{mean}_{j\in\mathcal{N}(i)}
-\left(\rho_{ij}h_j\right).
-\]
-
-Finally, the aggregated message is combined with the root feature. In my implementation, I used separate root and neighbor projections in both GraphSAGE and CopresheafSAGE. This keeps the dimensional behavior of the two architectures consistent and makes the learned transport the main conceptual difference.
-
----
-
-## 5. Dataset
-
-### 5.1 MUTAG
+### 3.1 MUTAG
 
 MUTAG is a molecular graph classification dataset. Each graph represents a chemical compound.
 
@@ -176,7 +63,7 @@ The dataset contains:
 
 The full dataset contains 63 graphs from class 0 and 125 graphs from class 1. Therefore, the dataset is not perfectly balanced.
 
-### 5.2 Data splitting
+### 3.2 Data splitting
 
 The paper states that it uses an 80/20 train-test split. I followed this protocol.
 
@@ -199,9 +86,9 @@ This variation is one reason that accuracy can change across seeds.
 
 ---
 
-## 6. Implementation, Assumptions, Limitations and Corrections
+## 4. Implementation, Assumptions, Limitations and Corrections
 
-### 6.1 Software and hardware
+### 4.1 Software and hardware
 
 The implementation was written in Python using:
 
@@ -223,7 +110,7 @@ The final experiment environment was:
 | Device | CUDA |
 | GPU | Tesla T4 |
 
-### 6.2 Implementation correction
+### 4.2 Implementation correction
 
 During implementation, I noticed that the paper applies `tanh` to the learned transport update:
 
@@ -235,7 +122,7 @@ This detail is important because `tanh` bounds every diagonal update between -1 
 
 I corrected the implementation before running experiments.
 
-### 6.3 Epsilon assumption
+### 4.3 Epsilon assumption
 
 The paper writes the self-feature contribution as:
 
@@ -251,7 +138,7 @@ However, the paper does not clearly state the value of \(\epsilon\) or whether i
 
 This makes the self contribution equal to \(h_i\). I recorded this explicitly by NOTE_TO_GRADER keyword as an assumption.
 
-### 6.4 Parameter counts
+### 4.4 Parameter counts
 
 The trainable parameter counts are:
 
@@ -273,11 +160,11 @@ However, The 83.2% increase creates a capacity confound.
 A fair extension would increase the GraphSAGE hidden dimension until its parameter count is close to the copresheaf model.
 
 
-### 6.5 Exact seeds are unknown
+### 4.5 Exact seeds are unknown
 
 The paper states the number of runs but does not publish the exact random seeds or split indices. I used seeds 0 through 4. Different splits can produce different accuracy values on MUTAG.
 
-### 6.6 Not fully Specified Architecture Details
+### 4.6 Not fully Specified Architecture Details
 
 - the value of \(\epsilon\),
 - whether \(\epsilon\) is learned,
@@ -286,7 +173,7 @@ The paper states the number of runs but does not publish the exact random seeds 
 - every projection placement,
 - whether any hidden regularization was used.
 
-### 6.7 Only five runs
+### 4.7 Only five runs
 
 Five runs match the number stated in the paper for GraphSAGE models, but five observations provide limited statistical power.
 
@@ -294,9 +181,9 @@ A 20- or 50-seed experiment would give a more stable estimate of the mean and co
 
 ---
 
-## 7. Results
+## 5. Results
 
-### 7.1 Main comparison
+### 5.1 Main comparison
 
 | Model | Paper result | Reproduction result |
 |---|---:|---:|
@@ -329,7 +216,7 @@ Therefore, CopresheafSAGE improves the reproduced mean by approximately **1.05 p
 
 The paper's reported improvement is 4.3 percentage points, so the reproduction preserves the direction of the comparison but not the full reported effect size.
 
-### 7.2 Seed-level results
+### 5.2 Seed-level results
 
 | Seed | GraphSAGE | CopresheafSAGE | Copresheaf − GraphSAGE |
 |---:|---:|---:|---:|
@@ -355,7 +242,7 @@ which corresponds to two more correctly classified graphs out of 38.
 
 The negative differences at seeds 0 and 4 correspond to one fewer correct prediction.
 
-### 7.3 Final training loss
+### 5.3 Final training loss
 
 | Seed | GraphSAGE final train NLL | CopresheafSAGE final train NLL |
 |---:|---:|---:|
@@ -369,7 +256,7 @@ CopresheafSAGE obtained a lower final training NLL in every run. This suggests t
 
 This observation supports the need to distinguish training fit from test performance.
 
-## 8. Analysis
+## 6. Analysis
 
 The paired differences are:
 
@@ -415,9 +302,9 @@ With only five paired observations, the statistical power is low. The confidence
 
 ---
 
-## 11. Reproduction Results
+## 7. Reproduction Results
 
-### 11.1 Directional reproduction
+### 7.1 Directional reproduction
 
 This part was successful at the mean level. The paper reports:
 
@@ -433,7 +320,7 @@ My mean results also satisfy:
 
 Therefore, the mean direction agrees with the paper.
 
-### 11.2 Exact numerical replication
+### 7.2 Exact numerical replication
 
 This part was not fully achieved, but close results are obtained 
 
@@ -448,7 +335,7 @@ The exact difference is not surprising because the paper does not provide all ra
 
 My conclusion is that the reproduction supports the plausibility of the reported direction, but it does not independently confirm the size or consistency of the paper's improvement.
 
-## 12. Conclusion
+## 8. Conclusion
 
 In this project, I reproduced the GraphSAGE and CopresheafSAGE comparison from Table 3 of *Copresheaf Topological Neural Networks: A Generalized Deep Learning Framework*.
 
